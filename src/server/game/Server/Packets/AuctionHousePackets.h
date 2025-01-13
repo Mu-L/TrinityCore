@@ -45,13 +45,13 @@ namespace WorldPackets
             uint32 ItemID = 0;
             uint16 ItemLevel = 0;
             Optional<uint16> BattlePetSpeciesID;
-            Optional<uint16> SuffixItemNameDescriptionID;
+            Optional<uint16> ItemSuffix;
         };
 
         struct AuctionListFilterSubClass
         {
             int32 ItemSubclass = 0;
-            uint32 InvTypeMask = 0;
+            uint64 InvTypeMask = 0;
         };
 
         struct AuctionListFilterClass
@@ -100,7 +100,7 @@ namespace WorldPackets
             Optional<uint8> MaxBattlePetQuality;
             Optional<uint8> MaxBattlePetLevel;
             Optional<uint8> BattlePetBreedID;
-            Optional<uint32> Unk901_1;
+            Optional<uint32> BattlePetLevelMask;
             bool ContainsOwnerItem = false;
             bool ContainsOnlyCollectedAppearances = false;
         };
@@ -152,9 +152,12 @@ namespace WorldPackets
             uint32 Offset = 0;
             uint8 MinLevel = 1;
             uint8 MaxLevel = MAX_LEVEL;
+            uint8 Unused1007_1 = 0;
+            uint8 Unused1007_2 = 0;
             AuctionHouseFilterMask Filters = AuctionHouseFilterMask(0);
             std::vector<uint8> KnownPets; // size checked separately in Read()
             int8 MaxPetLevel = 0;
+            uint32 Unused1026 = 0;
             Optional<Addon::AddOnInfo> TaintedBy;
             std::string Name;
             Array<AuctionListFilterClass, 7> ItemClassFilters;
@@ -306,14 +309,6 @@ namespace WorldPackets
             Optional<Addon::AddOnInfo> TaintedBy;
         };
 
-        class AuctionRequestFavoriteList final : public ClientPacket
-        {
-        public:
-            AuctionRequestFavoriteList(WorldPacket&& packet) : ClientPacket(CMSG_AUCTION_REQUEST_FAVORITE_LIST, std::move(packet)) { }
-
-            void Read() override { }
-        };
-
         class AuctionSellCommodity final : public ClientPacket
         {
         public:
@@ -418,7 +413,8 @@ namespace WorldPackets
             WorldPacket const* Write() override;
 
             ObjectGuid Guid;
-            uint32 DeliveryDelay = 0;
+            uint32 PurchasedItemDeliveryDelay = 0;
+            uint32 CancelledItemDeliveryDelay = 0;
             bool OpenForBusiness = true;
         };
 

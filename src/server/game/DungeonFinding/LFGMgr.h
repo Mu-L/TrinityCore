@@ -306,6 +306,7 @@ struct LFGDungeonData
     bool seasonal;
     float x, y, z, o;
     uint16 requiredItemLevel;
+    uint32 finalDungeonEncounterId;
 
     // Helpers
     uint32 Entry() const { return id + (type << 24); }
@@ -329,6 +330,8 @@ class TC_GAME_API LFGMgr
         void Update(uint32 diff);
 
         // World.cpp
+        /// Check dungeon completion on encounter completion
+        void OnDungeonEncounterDone(ObjectGuid gguid, std::array<uint32, 4> const& dungeonEncounterId, Map const* currMap);
         /// Finish the dungeon for the given group. All check are performed using internal lfg data
         void FinishDungeon(ObjectGuid gguid, uint32 dungeonId, Map const* currMap);
         /// Loads rewards for random dungeons
@@ -499,6 +502,11 @@ class TC_GAME_API LFGMgr
         LfgGroupDataContainer GroupsStore;                 /// Group data
 };
 
+inline int32 format_as(LFGMgrEnum e) { return e; }
+inline int32 format_as(LfgProposalState e) { return e; }
+inline uint8 format_as(LfgTeleportResult e) { return e; }
+inline int32 format_as(LfgJoinResult e) { return e; }
+inline int32 format_as(LfgRoleCheckState e) { return e; }
 } // namespace lfg
 
 #define sLFGMgr lfg::LFGMgr::instance()

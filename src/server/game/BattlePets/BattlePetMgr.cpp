@@ -16,18 +16,19 @@
  */
 
 #include "BattlePetMgr.h"
-#include "DB2Stores.h"
 #include "Containers.h"
 #include "Creature.h"
+#include "DB2Stores.h"
 #include "DatabaseEnv.h"
 #include "GameTables.h"
 #include "GameTime.h"
 #include "Item.h"
 #include "Log.h"
+#include "MapUtils.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
-#include "Realm.h"
+#include "RealmList.h"
 #include "Util.h"
 #include "World.h"
 #include "WorldSession.h"
@@ -130,7 +131,7 @@ void BattlePetMgr::LoadAvailablePetBreeds()
 
         if (!sBattlePetSpeciesStore.LookupEntry(speciesId))
         {
-            TC_LOG_ERROR("sql.sql", "Non-existing BattlePetSpecies.db2 entry %u was referenced in `battle_pet_breeds` by row (%u, %u).", speciesId, speciesId, breedId);
+            TC_LOG_ERROR("sql.sql", "Non-existing BattlePetSpecies.db2 entry {} was referenced in `battle_pet_breeds` by row ({}, {}).", speciesId, speciesId, breedId);
             continue;
         }
 
@@ -140,7 +141,7 @@ void BattlePetMgr::LoadAvailablePetBreeds()
         ++count;
     } while (result->NextRow());
 
-    TC_LOG_INFO("server.loading", ">> Loaded %u battle pet breeds.", count);
+    TC_LOG_INFO("server.loading", ">> Loaded {} battle pet breeds.", count);
 }
 
 void BattlePetMgr::LoadDefaultPetQualities()
@@ -161,26 +162,26 @@ void BattlePetMgr::LoadDefaultPetQualities()
         BattlePetSpeciesEntry const* battlePetSpecies = sBattlePetSpeciesStore.LookupEntry(speciesId);
         if (!battlePetSpecies)
         {
-            TC_LOG_ERROR("sql.sql", "Non-existing BattlePetSpecies.db2 entry %u was referenced in `battle_pet_quality` by row (%u, %u).", speciesId, speciesId, quality);
+            TC_LOG_ERROR("sql.sql", "Non-existing BattlePetSpecies.db2 entry {} was referenced in `battle_pet_quality` by row ({}, {}).", speciesId, speciesId, quality);
             continue;
         }
 
         if (quality >= AsUnderlyingType(BattlePetBreedQuality::Count))
         {
-            TC_LOG_ERROR("sql.sql", "BattlePetSpecies.db2 entry %u was referenced in `battle_pet_quality` with non-existing quality %u).", speciesId, quality);
+            TC_LOG_ERROR("sql.sql", "BattlePetSpecies.db2 entry {} was referenced in `battle_pet_quality` with non-existing quality {}).", speciesId, quality);
             continue;
         }
 
         if (battlePetSpecies->GetFlags().HasFlag(BattlePetSpeciesFlags::WellKnown) && quality > AsUnderlyingType(BattlePetBreedQuality::Rare))
         {
-            TC_LOG_ERROR("sql.sql", "Learnable BattlePetSpecies.db2 entry %u was referenced in `battle_pet_quality` with invalid quality %u. Maximum allowed quality is BattlePetBreedQuality::Rare.", speciesId, quality);
+            TC_LOG_ERROR("sql.sql", "Learnable BattlePetSpecies.db2 entry {} was referenced in `battle_pet_quality` with invalid quality {}. Maximum allowed quality is BattlePetBreedQuality::Rare.", speciesId, quality);
             continue;
         }
 
         _defaultQualityPerSpecies[speciesId] = quality;
     } while (result->NextRow());
 
-    TC_LOG_INFO("server.loading", ">> Loaded %u battle pet qualities.", uint32(_defaultQualityPerSpecies.size()));
+    TC_LOG_INFO("server.loading", ">> Loaded {} battle pet qualities.", uint32(_defaultQualityPerSpecies.size()));
 }
 
 void BattlePetMgr::AddBattlePetSpeciesBySpell(uint32 spellId, BattlePetSpeciesEntry const* speciesEntry)
@@ -253,7 +254,7 @@ void BattlePetMgr::LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slot
                 {
                     if (ownerGuid.IsEmpty())
                     {
-                        TC_LOG_ERROR("misc", "Battlenet account with id %u has battle pet of species %u with BattlePetSpeciesFlags::NotAccountWide but no owner", _owner->GetBattlenetAccountId(), species);
+                        TC_LOG_ERROR("misc", "Battlenet account with id {} has battle pet of species {} with BattlePetSpeciesFlags::NotAccountWide but no owner", _owner->GetBattlenetAccountId(), species);
                         continue;
                     }
                 }
@@ -261,7 +262,7 @@ void BattlePetMgr::LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slot
                 {
                     if (!ownerGuid.IsEmpty())
                     {
-                        TC_LOG_ERROR("misc", "Battlenet account with id %u has battle pet of species %u without BattlePetSpeciesFlags::NotAccountWide but with owner", _owner->GetBattlenetAccountId(), species);
+                        TC_LOG_ERROR("misc", "Battlenet account with id {} has battle pet of species {} without BattlePetSpeciesFlags::NotAccountWide but with owner", _owner->GetBattlenetAccountId(), species);
                         continue;
                     }
                 }
@@ -269,9 +270,9 @@ void BattlePetMgr::LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slot
                 if (HasMaxPetCount(speciesEntry, ownerGuid))
                 {
                     if (ownerGuid.IsEmpty())
-                        TC_LOG_ERROR("misc", "Battlenet account with id %u has more than maximum battle pets of species %u", _owner->GetBattlenetAccountId(), species);
+                        TC_LOG_ERROR("misc", "Battlenet account with id {} has more than maximum battle pets of species {}", _owner->GetBattlenetAccountId(), species);
                     else
-                        TC_LOG_ERROR("misc", "Battlenet account with id %u has more than maximum battle pets of species %u for player %s", _owner->GetBattlenetAccountId(), species, ownerGuid.ToString().c_str());
+                        TC_LOG_ERROR("misc", "Battlenet account with id {} has more than maximum battle pets of species {} for player {}", _owner->GetBattlenetAccountId(), species, ownerGuid.ToString());
 
                     continue;
                 }
@@ -290,18 +291,19 @@ void BattlePetMgr::LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slot
                 pet.NameTimestamp = fields[10].GetInt64();
                 pet.PacketInfo.CreatureID = speciesEntry->CreatureID;
 
-                if (!fields[12].IsNull())
+                if (!fields[13].IsNull())
                 {
                     pet.DeclinedName = std::make_unique<DeclinedName>();
                     for (uint8 i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
-                        pet.DeclinedName->name[i] = fields[12 + i].GetString();
+                        pet.DeclinedName->name[i] = fields[13 + i].GetString();
                 }
 
                 if (!ownerGuid.IsEmpty())
                 {
                     pet.PacketInfo.OwnerInfo.emplace();
                     pet.PacketInfo.OwnerInfo->Guid = ownerGuid;
-                    pet.PacketInfo.OwnerInfo->PlayerVirtualRealm = pet.PacketInfo.OwnerInfo->PlayerNativeRealm = GetVirtualRealmAddress();
+                    if (std::shared_ptr<Realm const> ownerRealm = sRealmList->GetRealm(fields[12].GetInt32()))
+                        pet.PacketInfo.OwnerInfo->PlayerVirtualRealm = pet.PacketInfo.OwnerInfo->PlayerNativeRealm = ownerRealm->Id.GetAddress();
                 }
 
                 pet.SaveInfo = BATTLE_PET_UNCHANGED;
@@ -353,7 +355,7 @@ void BattlePetMgr::SaveToDB(LoginDatabaseTransaction trans)
                 if (itr->second.PacketInfo.OwnerInfo)
                 {
                     stmt->setInt64(12, itr->second.PacketInfo.OwnerInfo->Guid.GetCounter());
-                    stmt->setInt32(13, realm.Id.Realm);
+                    stmt->setInt32(13, sRealmList->GetCurrentRealmId().Realm);
                 }
                 else
                 {
@@ -474,7 +476,7 @@ void BattlePetMgr::AddPet(uint32 species, uint32 display, uint16 breed, BattlePe
     {
         pet.PacketInfo.OwnerInfo.emplace();
         pet.PacketInfo.OwnerInfo->Guid = player->GetGUID();
-        pet.PacketInfo.OwnerInfo->PlayerVirtualRealm = pet.PacketInfo.OwnerInfo->PlayerNativeRealm = GetVirtualRealmAddress();
+        pet.PacketInfo.OwnerInfo->PlayerVirtualRealm = pet.PacketInfo.OwnerInfo->PlayerNativeRealm = player->m_playerData->VirtualPlayerRealm;
     }
 
     pet.SaveInfo = BATTLE_PET_NEW;

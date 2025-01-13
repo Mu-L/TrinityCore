@@ -123,9 +123,9 @@ enum COSMisc
 
 DoorData const doorData[] =
 {
-    { GO_MALGANIS_GATE_2, DATA_MAL_GANIS, DOOR_TYPE_ROOM },
-    { GO_EXIT_GATE,       DATA_MAL_GANIS, DOOR_TYPE_PASSAGE },
-    { 0,                  0,              DOOR_TYPE_ROOM } // END
+    { GO_MALGANIS_GATE_2, DATA_MAL_GANIS, EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_EXIT_GATE,       DATA_MAL_GANIS, EncounterDoorBehavior::OpenWhenDone },
+    { 0,                  0,              EncounterDoorBehavior::OpenWhenNotInProgress } // END
 };
 
 DungeonEncounterData const encounters[] =
@@ -300,7 +300,7 @@ class instance_culling_of_stratholme : public InstanceMapScript
                 if (!_infiniteGuardianTimeout)
                     timediff = -1;
 
-                TC_LOG_DEBUG("scripts.cos", "instance_culling_of_stratholme::ReadSaveDataMore: Loaded with state %u and guardian timeout at %zu minutes %zu seconds from now", (uint32)loadState, timediff / MINUTE, timediff % MINUTE);
+                TC_LOG_DEBUG("scripts.cos", "instance_culling_of_stratholme::ReadSaveDataMore: Loaded with state {} and guardian timeout at {} minutes {} seconds from now", (uint32)loadState, timediff / MINUTE, timediff % MINUTE);
             }
 
             void SetData(uint32 type, uint32 data) override
@@ -405,8 +405,8 @@ class instance_culling_of_stratholme : public InstanceMapScript
                                 if (player->GetGUID() == guid || !player->IsGameMaster())
                                 {
                                     player->CombatStop(true);
-                                    const float offsetDist = 10;
-                                    float myAngle = rand_norm() * 2.0 * M_PI;
+                                    constexpr float offsetDist = 10.0f;
+                                    float myAngle = rand_norm() * static_cast<float>(2.0f * M_PI);
                                     Position myTarget(target.GetPositionX() + std::sin(myAngle) * offsetDist, target.GetPositionY() + std::sin(myAngle) * offsetDist, target.GetPositionZ(), myAngle + M_PI);
                                     player->NearTeleportTo(myTarget);
                                 }
@@ -605,7 +605,7 @@ class instance_culling_of_stratholme : public InstanceMapScript
                         _plagueCrates.push_back(creature->GetGUID());
                         break;
                     case NPC_ARTHAS:
-                        TC_LOG_DEBUG("scripts.cos", "instance_culling_of_stratholme::OnCreatureCreate: Arthas spawned at %s", creature->GetPosition().ToString().c_str());
+                        TC_LOG_DEBUG("scripts.cos", "instance_culling_of_stratholme::OnCreatureCreate: Arthas spawned at {}", creature->GetPosition().ToString());
                         _arthasGUID = creature->GetGUID();
                         creature->setActive(true);
                         break;
@@ -643,7 +643,7 @@ class instance_culling_of_stratholme : public InstanceMapScript
 
             void SetInstanceProgress(COSProgressStates state, bool force)
             {
-                TC_LOG_DEBUG("scripts.cos", "instance_culling_of_stratholme::SetInstanceProgress: Instance progress is now 0x%X", (uint32)state);
+                TC_LOG_DEBUG("scripts.cos", "instance_culling_of_stratholme::SetInstanceProgress: Instance progress is now 0x{:X}", (uint32)state);
                 _currentState = state;
 
                 /* Spawn group management */
@@ -729,7 +729,7 @@ class instance_culling_of_stratholme : public InstanceMapScript
                     // Reset respawn time on all permanent spawns, despawn all temporary spawns
                     // @todo dynspawn, this won't work
                     std::vector<Creature*> toDespawn;
-                    std::unordered_map<ObjectGuid, Creature*> const& objects = instance->GetObjectsStore().GetElements()._elements._element;
+                    std::unordered_map<ObjectGuid, Creature*> const& objects = instance->GetObjectsStore().Data.Head;
                     for (std::unordered_map<ObjectGuid, Creature*>::const_iterator itr = objects.cbegin(); itr != objects.cend(); ++itr)
                     {
                         if (itr->second && (itr->second->isDead() || !itr->second->GetSpawnId() || itr->second->GetOriginalEntry() != itr->second->GetEntry()))
