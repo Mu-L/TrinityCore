@@ -36,6 +36,7 @@
 
 enum EvokerSpells
 {
+    SPELL_EVOKER_AZURE_ESSENCE_BURST            = 375721,
     SPELL_EVOKER_BLAST_FURNACE                  = 375510,
     SPELL_EVOKER_BLESSING_OF_THE_BRONZE_DK      = 381732,
     SPELL_EVOKER_BLESSING_OF_THE_BRONZE_DH      = 381741,
@@ -50,8 +51,14 @@ enum EvokerSpells
     SPELL_EVOKER_BLESSING_OF_THE_BRONZE_SHAMAN  = 381756,
     SPELL_EVOKER_BLESSING_OF_THE_BRONZE_WARLOCK = 381757,
     SPELL_EVOKER_BLESSING_OF_THE_BRONZE_WARRIOR = 381758,
+    SPELL_EVOKER_CAUSALITY                      = 375777,
+    SPELL_EVOKER_DISINTEGRATE                   = 356995,
+    SPELL_EVOKER_EMERALD_BLOSSOM_HEAL           = 355916,
     SPELL_EVOKER_ENERGIZING_FLAME               = 400006,
+    SPELL_EVOKER_ESSENCE_BURST                  = 359618,
     SPELL_EVOKER_FIRESTORM_DAMAGE               = 369374,
+    SPELL_EVOKER_ETERNITY_SURGE                 = 359073,
+    SPELL_EVOKER_FIRE_BREATH                    = 357208,
     SPELL_EVOKER_FIRE_BREATH_DAMAGE             = 357209,
     SPELL_EVOKER_GLIDE_KNOCKBACK                = 358736,
     SPELL_EVOKER_HOVER                          = 358267,
@@ -61,7 +68,9 @@ enum EvokerSpells
     SPELL_EVOKER_PERMEATING_CHILL_TALENT        = 370897,
     SPELL_EVOKER_PYRE_DAMAGE                    = 357212,
     SPELL_EVOKER_RUBY_EMBERS                    = 365937,
+    SPELL_EVOKER_RUBY_ESSENCE_BURST             = 376872,
     SPELL_EVOKER_SCOURING_FLAME                 = 378438,
+    SPELL_EVOKER_SNAPFIRE                       = 370818,
     SPELL_EVOKER_SOAR_RACIAL                    = 369536,
     SPELL_EVOKER_VERDANT_EMBRACE_HEAL           = 361195,
     SPELL_EVOKER_VERDANT_EMBRACE_JUMP           = 373514
@@ -144,6 +153,66 @@ class spell_evo_blessing_of_the_bronze : public SpellScript
     }
 };
 
+static constexpr std::array<uint32, 2> CausalityAffectedEmpowerSpells = { SPELL_EVOKER_ETERNITY_SURGE, SPELL_EVOKER_FIRE_BREATH };
+
+// Called by 356995 - Disintegrate (Blue)
+class spell_evo_causality_disintegrate : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_EVOKER_CAUSALITY, EFFECT_1 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_EVOKER_CAUSALITY);
+    }
+
+    void OnTick(AuraEffect const* /*aurEff*/) const
+    {
+        if (AuraEffect const* causality = GetCaster()->GetAuraEffect(SPELL_EVOKER_CAUSALITY, EFFECT_0))
+            for (uint32 spell : CausalityAffectedEmpowerSpells)
+                GetCaster()->GetSpellHistory()->ModifyCooldown(spell, Milliseconds(causality->GetAmount()));
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_evo_causality_disintegrate::OnTick, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE);
+    }
+};
+
+// Called by 357212 - Pyre (Red)
+class spell_evo_causality_pyre : public SpellScript
+{
+    static constexpr int64 TargetLimit = 5;
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_EVOKER_CAUSALITY, EFFECT_1 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_EVOKER_CAUSALITY);
+    }
+
+    void HandleCooldown() const
+    {
+        AuraEffect const* causality = GetCaster()->GetAuraEffect(SPELL_EVOKER_CAUSALITY, EFFECT_1);
+        if (!causality)
+            return;
+
+        Milliseconds cooldownReduction = Milliseconds(std::min(GetUnitTargetCountForEffect(EFFECT_0), TargetLimit) * causality->GetAmount());
+        for (uint32 spell : CausalityAffectedEmpowerSpells)
+            GetCaster()->GetSpellHistory()->ModifyCooldown(spell, cooldownReduction);
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_evo_causality_pyre::HandleCooldown);
+    }
+};
+
 // 370455 - Charged Blast
 class spell_evo_charged_blast : public AuraScript
 {
@@ -156,6 +225,73 @@ class spell_evo_charged_blast : public AuraScript
     {
         DoCheckProc += AuraCheckProcFn(spell_evo_charged_blast::CheckProc);
     }
+};
+
+// 355913 - Emerald Blossom (Green)
+// ID - 23318
+struct at_evo_emerald_blossom : AreaTriggerAI
+{
+    using AreaTriggerAI::AreaTriggerAI;
+
+    void OnRemove() override
+    {
+        if (Unit* caster = at->GetCaster())
+            caster->CastSpell(at->GetPosition(), SPELL_EVOKER_EMERALD_BLOSSOM_HEAL, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+    }
+};
+
+// 355916 - Emerald Blossom (Green)
+class spell_evo_emerald_blossom_heal : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
+    }
+
+    void FilterTargets(std::list<WorldObject*>& targets) const
+    {
+        uint32 const maxTargets = uint32(GetSpellInfo()->GetEffect(EFFECT_1).CalcValue(GetCaster()));
+        Trinity::SelectRandomInjuredTargets(targets, maxTargets, true);
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_evo_emerald_blossom_heal::FilterTargets, EFFECT_0, TARGET_UNIT_DEST_AREA_ALLY);
+    }
+};
+
+// Called by 362969 - Azure Strike
+// Called by 361469 - Living Flame (Red)
+class spell_evo_essence_burst_trigger : public SpellScript
+{
+public:
+    explicit spell_evo_essence_burst_trigger(uint32 talentAuraId) : _talentAuraId(talentAuraId) { }
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ _talentAuraId, SPELL_EVOKER_ESSENCE_BURST });
+    }
+
+    bool Load() override
+    {
+        AuraEffect const* aurEff = GetCaster()->GetAuraEffect(_talentAuraId, EFFECT_0);
+        return aurEff && roll_chance_i(aurEff->GetAmount());
+    }
+
+    void HandleEssenceBurst() const
+    {
+        GetCaster()->CastSpell(GetCaster(), SPELL_EVOKER_ESSENCE_BURST, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_evo_essence_burst_trigger::HandleEssenceBurst);
+    }
+
+    uint32 _talentAuraId;
 };
 
 // 357208 Fire Breath (Red)
@@ -229,15 +365,33 @@ struct at_evo_firestorm : AreaTriggerAI
 {
     using AreaTriggerAI::AreaTriggerAI;
 
-    void OnCreate(Spell const* /*creatingSpell*/) override
+    struct extra_create_data
     {
+        float SnapshotDamageMultipliers = 1.0f;
+    };
+
+    static extra_create_data& GetOrCreateExtraData(Spell* firestorm)
+    {
+        if (firestorm->m_customArg.type() != typeid(extra_create_data))
+            return firestorm->m_customArg.emplace<extra_create_data>();
+
+        return *std::any_cast<extra_create_data>(&firestorm->m_customArg);
+    }
+
+    void OnCreate(Spell const* creatingSpell) override
+    {
+        _damageSpellCustomArg = creatingSpell->m_customArg;
+
         _scheduler.Schedule(0ms, [this](TaskContext task)
         {
-            std::chrono::duration<float> period = 2s; // 2s, affected by haste
+            FloatMilliseconds period = 2s; // 2s, affected by haste
             if (Unit* caster = at->GetCaster())
             {
                 period *= *caster->m_unitData->ModCastingSpeed;
-                caster->CastSpell(at->GetPosition(), SPELL_EVOKER_FIRESTORM_DAMAGE, TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR);
+                caster->CastSpell(at->GetPosition(), SPELL_EVOKER_FIRESTORM_DAMAGE, CastSpellExtraArgsInit{
+                    .TriggerFlags = TRIGGERED_IGNORE_CAST_IN_PROGRESS | TRIGGERED_DONT_REPORT_CAST_ERROR,
+                    .CustomArg = _damageSpellCustomArg
+                });
             }
 
             task.Repeat(duration_cast<Milliseconds>(period));
@@ -251,6 +405,7 @@ struct at_evo_firestorm : AreaTriggerAI
 
 private:
     TaskScheduler _scheduler;
+    std::any _damageSpellCustomArg;
 };
 
 // 358733 - Glide (Racial)
@@ -434,6 +589,44 @@ class spell_evo_scouring_flame : public SpellScript
     }
 };
 
+// Called by 368847 - Firestorm (Red)
+class spell_evo_snapfire : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellEffect({ { SPELL_EVOKER_SNAPFIRE, EFFECT_1 } });
+    }
+
+    bool Load() override
+    {
+        return GetCaster()->HasAura(SPELL_EVOKER_SNAPFIRE);
+    }
+
+    void OnPrecast() override
+    {
+        if (AuraEffect const* snapfire = GetCaster()->GetAuraEffect(SPELL_EVOKER_SNAPFIRE, EFFECT_1))
+            if (GetSpell()->m_appliedMods.contains(snapfire->GetBase()))
+                AddPct(at_evo_firestorm::GetOrCreateExtraData(GetSpell()).SnapshotDamageMultipliers, snapfire->GetAmount());
+    }
+
+    void Register() override { }
+};
+
+// Called by 369374 - Firestorm (Red)
+class spell_evo_snapfire_bonus_damage : public SpellScript
+{
+    void CalculateDamageBonus(SpellEffectInfo const& /*spellEffectInfo*/, Unit* /*victim*/, int32& /*damage*/, int32& /*flatMod*/, float& pctMod) const
+    {
+        if (at_evo_firestorm::extra_create_data const* bonus = std::any_cast<at_evo_firestorm::extra_create_data>(&GetSpell()->m_customArg))
+            pctMod *= bonus->SnapshotDamageMultipliers;
+    }
+
+    void Register() override
+    {
+        CalcDamage += SpellCalcDamageFn(spell_evo_snapfire_bonus_damage::CalculateDamageBonus);
+    }
+};
+
 // 360995 - Verdant Embrace (Green)
 class spell_evo_verdant_embrace : public SpellScript
 {
@@ -492,7 +685,13 @@ void AddSC_evoker_spell_scripts()
 {
     RegisterSpellScript(spell_evo_azure_strike);
     RegisterSpellScript(spell_evo_blessing_of_the_bronze);
+    RegisterSpellScript(spell_evo_causality_disintegrate);
+    RegisterSpellScript(spell_evo_causality_pyre);
     RegisterSpellScript(spell_evo_charged_blast);
+    RegisterAreaTriggerAI(at_evo_emerald_blossom);
+    RegisterSpellScript(spell_evo_emerald_blossom_heal);
+    RegisterSpellScriptWithArgs(spell_evo_essence_burst_trigger, "spell_evo_azure_essence_burst", SPELL_EVOKER_AZURE_ESSENCE_BURST);
+    RegisterSpellScriptWithArgs(spell_evo_essence_burst_trigger, "spell_evo_ruby_essence_burst", SPELL_EVOKER_RUBY_ESSENCE_BURST);
     RegisterAreaTriggerAI(at_evo_firestorm);
     RegisterSpellScript(spell_evo_fire_breath);
     RegisterSpellScript(spell_evo_fire_breath_damage);
@@ -502,6 +701,8 @@ void AddSC_evoker_spell_scripts()
     RegisterSpellScript(spell_evo_pyre);
     RegisterSpellScript(spell_evo_ruby_embers);
     RegisterSpellScript(spell_evo_scouring_flame);
+    RegisterSpellScript(spell_evo_snapfire);
+    RegisterSpellScript(spell_evo_snapfire_bonus_damage);
     RegisterSpellScript(spell_evo_verdant_embrace);
     RegisterSpellScript(spell_evo_verdant_embrace_trigger_heal);
 }
